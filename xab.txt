@@ -1,4 +1,4 @@
 Good job bro :D, now add your resppne to this underneath on the next two lines. 
 
-
+go to your branch on the CLI now and add a .gitignore file and commit and push upstream
 
