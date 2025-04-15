@@ -1,0 +1,73 @@
+# Terraform state and backup files
+*.tfstate
+*.tfstate.*
+*.backup
+.terraform/
+
+# Terraform plan output
+*.tfplan
+
+# Local overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Crash logs
+crash.log
+*.crash
+
+# Terragrunt
+.terragrunt-cache/
+
+# Provider binaries (sometimes downloaded manually)
+terraform-provider-*
+
+# IDE/editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*.log
+*.bak
+
+# OS metadata files
+.DS_Store
+Thumbs.db
+
+# Python (if used in automation)
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+.env
+.venv/
+
+# Zip or archive artifacts
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# Common large binary types (protect against accidental commits)
+*.exe
+*.dll
+*.so
+*.bin
+*.o
+*.a
+*.dylib
+*.class
+*.jar
+*.iso
+*.img
+
+# Trivy SBOMs and scan outputs (optional)
+sboms/
+sbom_zips/
+*.cyclonedx.json
+*.spdx.json
+*.sbom.json
