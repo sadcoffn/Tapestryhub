@@ -1,0 +1,197 @@
+Ticktet #68- Test and improve gitlab transfer script
+Open
+ Issue
+created
+8 months ago
+by
+Jack Davis
+Description:
+Define, test, validate procedure/scripts for moving changes from low to high
+Deliverables:
+Improvement of script that would transfer from IL5 to IL6
+Tested and validated backup and transfer process
+Process to update to repos on il6
+POC:
+Primary PoC: @
+Dependencies:
+Relevant Documents:
+https://gitlab.mda.mil/gm-tma/infrastructure/scripts/transfer-scripts
+
+My Approach - 
+
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# === CONFIG ===
+LOG_FILE="mirror_error.log"
+CWD=$(pwd)
+GITLAB_TOKEN="${TF_VAR_gitlab_token:-$GITLAB_TOKEN}"
+GITLAB_URL="${GITLAB_URL:-"https://gitlab.mda.mil"}"
+GROUP_ID="${GROUP_ID:-"4484"}"
+SKIP_SUBGROUPS="${SKIP_SUBGROUPS:-"3483,4517"}"
+TARGET_BRANCHES=("main" "staging")
+
+MIRROR_DIR="${MIRROR_DIR:-"$CWD/git_mirrors"}"
+ARCHIVE_DIR="${ARCHIVE_DIR:-"$CWD/git_archives"}"
+MANIFEST_FILE="${MANIFEST_FILE:-"git_mirror_manifest_$(date +%Y%m%d_%H%M%S).csv"}"
+
+mkdir -p "$MIRROR_DIR" "$ARCHIVE_DIR"
+
+# === LOGGING ===
+true > "$LOG_FILE"
+exec 2>>"$LOG_FILE"
+exec > >(tee -a "$LOG_FILE")
+
+# === FUNCTIONS ===
+
+IFS=',' read -r -a SKIP_SUBGROUPS_ARRAY <<<"$SKIP_SUBGROUPS"
+
+should_skip_subgroup() {
+    local subgroup_id=$1
+    for skip_id in "${SKIP_SUBGROUPS_ARRAY[@]}"; do
+        if [[ "$skip_id" == "$subgroup_id" ]]; then return 0; fi
+    done
+    return 1
+}
+
+get_projects_in_group() {
+    local group_id=$1
+    local page=1
+    local per_page=100
+    while :; do
+        response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "$GITLAB_URL/api/v4/groups/$group_id/projects?per_page=$per_page&page=$page")
+        echo "$response" | jq -r '.[] | "\(.id);\(.path_with_namespace)"'
+        [[ $(echo "$response" | jq length) -lt $per_page ]] && break
+        ((page++))
+    done
+
+    curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/groups/$group_id/subgroups?per_page=100" |
+        jq -r '.[].id' | while read -r subgroup_id; do
+            if ! should_skip_subgroup "$subgroup_id"; then
+                get_projects_in_group "$subgroup_id"
+            fi
+        done
+}
+
+get_repo_https_url() {
+    local repo_id=$1
+    curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        "$GITLAB_URL/api/v4/projects/$repo_id" | jq -r '.http_url_to_repo'
+}
+
+get_highest_semver_tag() {
+    git tag -l "v[0-9]*.[0-9]*.[0-9]*" | sort -V | tail -n 1
+}
+
+increment_semver() {
+    local tag=$1
+    [[ -z "$tag" ]] && echo "v0.0.1" && return
+    version=$(echo "$tag" | sed 's/^v//' | cut -d'-' -f1)
+    IFS='.' read -r major minor patch <<<"$version"
+    echo "v$major.$minor.$((patch + 1))"
+}
+
+# === MAIN ===
+
+echo "Starting repository processing..."
+
+REPOS_TMP=$(mktemp)
+get_projects_in_group "$GROUP_ID" > "$REPOS_TMP"
+
+if [[ ! -s "$REPOS_TMP" ]]; then
+    echo "No repositories found for GROUP_ID $GROUP_ID. Exiting."
+    exit 1
+fi
+
+echo "Found $(wc -l < "$REPOS_TMP") repositories. Beginning processing..."
+
+manifest_entries=()
+
+while IFS=';' read -r repo_id repo_namespace; do
+    if [[ -z "$repo_id" || -z "$repo_namespace" ]]; then
+        echo "Skipping invalid repo line: $repo_id;$repo_namespace"
+        continue
+    fi
+
+    echo "------------------------------------------------------"
+    echo "Processing repo: $repo_namespace (ID: $repo_id)"
+    echo "Getting HTTPS URL for repo ID $repo_id..."
+    repo_url=$(get_repo_https_url "$repo_id")
+    if [[ -z "$repo_url" ]]; then
+        echo "Could not retrieve repo URL. Skipping $repo_namespace"
+        continue
+    fi
+
+    sanitized_name=$(echo "$repo_namespace" | sed 's|/|__|g')
+    mirror_path="$MIRROR_DIR/$sanitized_name.git"
+
+    echo "Cloning mirror of $repo_namespace..."
+    rm -rf "$mirror_path"
+    git clone --mirror "$repo_url" "$mirror_path" || {
+        echo "Failed to mirror $repo_namespace"
+        continue
+    }
+
+    cd "$mirror_path"
+
+    for branch in "${TARGET_BRANCHES[@]}"; do
+        branch_ref="refs/heads/$branch"
+        echo "Checking for branch: $branch"
+        if git show-ref --verify --quiet "$branch_ref"; then
+            highest_tag=$(get_highest_semver_tag)
+            next_tag=$(increment_semver "$highest_tag")
+            latest_commit=$(git rev-parse "$branch_ref")
+            echo "Latest commit: $latest_commit | Next tag: $next_tag"
+
+            if ! git tag -l | grep -q "^$next_tag$"; then
+                git tag -a "$next_tag" "$latest_commit" -m "Auto tag for airgap transfer"
+                echo "Created tag $next_tag"
+            else
+                echo "Tag $next_tag already exists"
+            fi
+
+            archive_name="${sanitized_name}__${branch}__${next_tag}.tar.gz"
+            archive_path="$ARCHIVE_DIR/$archive_name"
+
+            echo "Creating archive: $archive_path"
+            tar -czf "$archive_path" -C "$MIRROR_DIR" "$(basename "$mirror_path")"
+
+            if [[ -f "$archive_path" ]]; then
+                manifest_line="$repo_namespace;$branch;$next_tag;$archive_name"
+                echo "Staging manifest line: $manifest_line"
+                manifest_entries+=("$manifest_line")
+            else
+                echo "Archive file not found at $archive_path. Skipping manifest entry."
+            fi
+        else
+            echo "Branch '$branch' not found in $repo_namespace"
+        fi
+    done
+
+    cd "$CWD"
+done < "$REPOS_TMP"
+
+# Write all manifest entries at once
+{
+    echo "repo_namespace;branch;version_tag;archive_filename"
+    for line in "${manifest_entries[@]}"; do
+        echo "$line"
+    done
+} > "$MANIFEST_FILE"
+
+echo "===================================================="
+echo "Git mirror + archive script completed."
+echo "Manifest file: $MANIFEST_FILE"
+echo "Mirror directory: $MIRROR_DIR"
+echo "Archive directory: $ARCHIVE_DIR"
+echo "===================================================="
+echo
+echo "Manifest contents:"
+cat "$MANIFEST_FILE"  
+
+Also, 
+
+So the update on the transfer scripts using the git mirror method is that i have now found a better way to help  make its way into being transferred to IL6. All the IL5 group repos that the scripts mirrors will turn them into a single tar.gz file containing the ".git" of that particular repo focusing on the branches specified and ignoring certain subgroups as also specified and configured and already spoke on yesterday but now we can use command "  zip all_archives.zip *.tar.gz " from the "git_archives" directory the script makes collecting all .tar.gz files that contain the repos and bundle it into a single zip file that we can then upload into JFROG and download into our laptop file finder for data transfer and then plug it into a IL6 env and use the unzip command and tar -xzf to extract the contents. I ran a test -- You can use this command to pull the IL5 group # 4484 that chuck wanted to see yesterday. Command:  jf rt curl -XGET /gm-tma-gmz-sivv-generic-dev-local/data-transfer-git-repos/all_archives.zip -o /home/coder/all_archives.zip then run Command: unzip all_archives.zip and then Command: tar -xzf {FILE_NAME.tar.gz} to extract to contents and view the repo.  
+ 
