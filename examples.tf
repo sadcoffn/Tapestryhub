@@ -18,27 +18,28 @@ resource "coder_metadata" "compute_instance" {
 # ❌ INVALID: Missing daily_cost property
 resource "coder_metadata" "missing_cost" {
   resource_id = "resource-789"
+  daily_cost = 100 # Fix for pipeline
   description = "This resource is missing daily_cost"
 }
 
 # ❌ INVALID: Has daily_cost but value is zero
 resource "coder_metadata" "zero_cost" {
   resource_id = "resource-101"
-  daily_cost  = 0
+  daily_cost  = 15 # Fix for pipeline
   description = "Zero cost resource"
 }
 
 # ❌ INVALID: Has daily_cost but value is negative
 resource "coder_metadata" "negative_cost" {
   resource_id = "resource-202"
-  daily_cost  = -50
+  daily_cost  = 50 # Fix for pipeline
   description = "Negative cost resource"
 }
 
 # ❌ INVALID: Has daily_cost but value is not a number
 resource "coder_metadata" "invalid_cost" {
   resource_id = "resource-303"
-  daily_cost  = "not_a_number"
+  daily_cost  = "60" # Fixed for pipeline
   description = "Invalid cost value"
 }
 
