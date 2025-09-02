@@ -32,7 +32,7 @@ resource "coder_metadata" "zero_cost" {
 # ❌ INVALID: Has daily_cost but value is negative
 resource "coder_metadata" "negative_cost" {
   resource_id = "resource-202"
-  daily_cost  = 50 # Fix for pipeline
+  daily_cost  = -50 # Fix for pipeline
   description = "Negative cost resource"
 }
 
