@@ -33,17 +33,7 @@ jobs:
 
     - name: Run daily cost validation
       run: |
-        python3 validate_daily_cost.py . > validation_output.txt 2>&1
-        echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
-
-    - name: Create validation report
-      run: |
-        if [ -f validation_output.txt ]; then
-          echo "Validation completed. Check the output above for results."
-          echo "Status: $(grep -o 'Status: [A-Z]*' validation_output.txt || echo 'Status: UNKNOWN')"
-        else
-          echo "Validation failed to produce output"
-        fi
+        python3 validate_daily_cost.py . 
 
     - name: Upload validation report
       uses: actions/upload-artifact@v4
