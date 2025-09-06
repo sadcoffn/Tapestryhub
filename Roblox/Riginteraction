@@ -1,0 +1,136 @@
+local rig = script.Parent
+local head = rig:FindFirstChild("Head")
+local humanoidRootPart = rig:FindFirstChild("HumanoidRootPart")
+local chatService = game:GetService("Chat")
+local players = game:GetService("Players")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+
+local INTERACT_DISTANCE = 15
+
+-- Questions and answers
+local QA = {
+    ["how are you"] = "im getting there",
+    ["why did you make this game"] = "to break from reality",
+    -- Add more questions and answers here
+    ["hello"] = "Hi there!",
+    ["what's your name"] = "I'm just an NPC.",
+    ["what can you do"] = "I can dance and freeze randomly!",
+}
+
+-- Funny taco phrases
+local tacoPhrases = {
+    "Tacos are my spirit animal!",
+    "If I could, I'd eat tacos every second.",
+    "You know what's better than gold? Tacos.",
+    "I dream of tacos every night.",
+    "My favorite dance move is the taco twirl.",
+    "If you have tacos, we're best friends.",
+    "Taco Tuesday? More like Taco Everyday!",
+    "I once tried to build a house out of tacos. It was delicious.",
+    "Tacos > Everything.",
+    "If you say 'taco' three times, I appear with salsa.",
+}
+
+-- Funny dance phrases
+local dancePhrases = {
+    "Time to break it down!",
+    "Let's get this party started!",
+    "Watch me do the robot!",
+    "Dancing is my superpower!",
+    "I'm about to drop some sick moves!",
+    "Get ready for the ultimate dance battle!",
+    "My feet are itching to move!",
+    "Let's boogie all night long!",
+    "I was born to dance!",
+    "Time to show you how it's done!",
+    "Dancing makes everything better!",
+    "Let's turn this place into a dance floor!",
+    "I've got moves you've never seen!",
+    "Dance like nobody's watching!",
+    "Ready to get funky fresh!",
+}
+
+-- Helper to check if player is near the rig
+local function isPlayerNearRig(player)
+    local character = player.Character
+    if character and humanoidRootPart then
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local dist = (hrp.Position - humanoidRootPart.Position).Magnitude
+            return dist <= INTERACT_DISTANCE
+        end
+    end
+    return false
+end
+
+-- Helper to check if message contains "taco" or "tacos"
+local function containsTaco(msg)
+    local lowerMsg = string.lower(msg)
+    return string.find(lowerMsg, "taco") ~= nil or string.find(lowerMsg, "tacos") ~= nil
+end
+
+-- Helper to check if message contains "dance"
+local function containsDance(msg)
+    return string.find(string.lower(msg), "dance") ~= nil
+end
+
+local tacoDanceEvent = replicatedStorage:FindFirstChild("NPCTacoDance")
+local tacoRainEvent = replicatedStorage:FindFirstChild("NPCTacoRain")
+
+-- Listen for player chat and respond if near
+players.PlayerAdded:Connect(function(player)
+    player.Chatted:Connect(function(msg)
+        if isPlayerNearRig(player) then
+            local lowerMsg = string.lower(msg)
+            local answer = QA[lowerMsg]
+            if answer then
+                chatService:Chat(head or rig, answer, Enum.ChatColor.Blue)
+            elseif containsTaco(msg) then
+                local phrase = tacoPhrases[math.random(1, #tacoPhrases)]
+                chatService:Chat(head or rig, phrase, Enum.ChatColor.Green)
+                if tacoDanceEvent then
+                    tacoDanceEvent:Fire()
+                end
+                if tacoRainEvent then
+                    tacoRainEvent:Fire()
+                end
+            elseif containsDance(msg) then
+                local phrase = dancePhrases[math.random(1, #dancePhrases)]
+                chatService:Chat(head or rig, phrase, Enum.ChatColor.Green)
+                if tacoDanceEvent then
+                    tacoDanceEvent:Fire()
+                end
+            end
+        end
+    end)
+end)
+
+-- For players already in game
+local playerList = players:GetPlayers()
+for i, player in playerList do
+    player.Chatted:Connect(function(msg)
+        if isPlayerNearRig(player) then
+            local lowerMsg = string.lower(msg)
+            local answer = QA[lowerMsg]
+            if answer then
+                chatService:Chat(head or rig, answer, Enum.ChatColor.Blue)
+            elseif containsTaco(msg) then
+                local phrase = tacoPhrases[math.random(1, #tacoPhrases)]
+                chatService:Chat(head or rig, phrase, Enum.ChatColor.Green)
+                if tacoDanceEvent then
+                    tacoDanceEvent:Fire()
+                end
+                if tacoRainEvent then
+                    tacoRainEvent:Fire()
+                end
+            elseif containsDance(msg) then
+                local phrase = dancePhrases[math.random(1, #dancePhrases)]
+                chatService:Chat(head or rig, phrase, Enum.ChatColor.Green)
+                if tacoDanceEvent then
+                    tacoDanceEvent:Fire()
+                end
+            end
+        end
+    end)
+end
+
