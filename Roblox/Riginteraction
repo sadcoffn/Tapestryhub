@@ -1,3 +1,5 @@
+# Hey JD
+
 local rig = script.Parent
 local head = rig:FindFirstChild("Head")
 local humanoidRootPart = rig:FindFirstChild("HumanoidRootPart")
